@@ -1,0 +1,119 @@
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+
+BOT_TOKEN = "8249372979:AAH9tukAKXcQx6Y_v4VnnFxJ1EKXWLveHdE"
+CHANNELS = ["comediauz", "kinolarolamigasay"]  # Kanal username'lari
+MOVIE_CHANNEL = "kinouchuntest"  # Kino postlari joylangan kanal
+
+# Foydalanuvchining kanalga obuna bo'lishini tekshirish
+async def check_subscription(user_id, context: ContextTypes.DEFAULT_TYPE):
+    subscriptions = {"comediauz": False, "kinolarolamigasay": False}
+    for channel in CHANNELS:
+        try:
+            member_status = await context.bot.get_chat_member(f"@{channel}", user_id)
+            if member_status.status in ["member", "administrator"]:
+                subscriptions[channel] = True
+        except Exception:
+            pass
+    return subscriptions
+
+# Start komandasini boshqarish
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    subscriptions = await check_subscription(user_id, context)
+
+    # Agar foydalanuvchi hali kanalga obuna bo'lmagan bo'lsa
+    if not all(subscriptions.values()):
+        keyboard = []
+        for i, (channel, is_subscribed) in enumerate(subscriptions.items(), start=1):
+            if not is_subscribed:
+                keyboard.append([InlineKeyboardButton(f"{i}-kanalga obuna bo'lish", url=f"https://t.me/{channel}")])
+
+        keyboard.append([InlineKeyboardButton("Obuna bo'ldim â", callback_data="check_subscription")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            "Assalomu alaykum! Botimizga xush kelibsiz! ð¥\n\n"
+            "Botimizdan to'liq foydalanish uchun quyidagi kanallarga obuna bo'ling ð",
+            reply_markup=reply_markup,
+        )
+    else:
+        await update.message.reply_text("Sizga kerakli kino raqamini kiriting ð¬")
+
+# Obunani tasdiqlash va tekshirish
+async def handle_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+
+    subscriptions = await check_subscription(user_id, context)
+    keyboard = []
+
+    # Agar foydalanuvchi kanallarga obuna bo'lmagan bo'lsa, ularni ko'rsatish
+    for i, (channel, is_subscribed) in enumerate(subscriptions.items(), start=1):
+        if not is_subscribed:
+            keyboard.append([InlineKeyboardButton(f"{i}-kanalga obuna bo'lish", url=f"https://t.me/{channel}")])
+
+    keyboard.append([InlineKeyboardButton("Obuna bo'ldim â", callback_data="check_subscription")])
+
+    # Foydalanuvchi kanallarga obuna bo'lgandan keyin kino kodini so'rash
+    if all(subscriptions.values()):
+        await query.message.reply_text(
+            "Tabriklaymiz! Siz barcha kanallarimizga obuna bo'ldingiz.\n"
+            "Endi kino kodini kiriting ð¬"
+        )
+    else:
+        await query.message.reply_text(
+            "Siz hali barcha kanallarga obuna bo'lmadingiz. Iltimos, quyidagi kanallarga obuna bo'ling ð",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+# Kino kodi bilan postni yuborish
+async def handle_movie_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+
+    # Obunani tekshirish
+    subscriptions = await check_subscription(user_id, context)
+    if not all(subscriptions.values()):
+        keyboard = []
+        for i, (channel, is_subscribed) in enumerate(subscriptions.items(), start=1):
+            if not is_subscribed:
+                keyboard.append([InlineKeyboardButton(f"{i}-kanalga obuna bo'lish", url=f"https://t.me/{channel}")])
+
+        keyboard.append([InlineKeyboardButton("Obuna bo'ldim â", callback_data="check_subscription")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            "Siz hali barcha kanallarimizga obuna bo'lmadingiz.\n"
+            "Iltimos, quyidagi kanallarga obuna bo'ling ð",
+            reply_markup=reply_markup,
+        )
+        return
+
+    # Agar barcha kanallarga obuna bo'lgan bo'lsa, kino kodini tekshirish
+    if update.message and update.message.text == "123":  # Kino kodi
+        try:
+            await context.bot.copy_message(
+                chat_id=user_id,
+                from_chat_id=f"@kinouchuntest",  # Kino postini yuboradigan kanal
+                message_id=2,  # Uchinchi kanaldagi ikkinchi post
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Xatolik yuz berdi: {e}")
+    else:
+        await update.message.reply_text("Noto'g'ri kod! Iltimos, qayta urinib ko'ring.")
+
+if __name__ == "__main__":
+    app = ApplicationBuilder().token("1825837669:AAHb9h0CYMq2Sn9E7BzQTFKertbRjx-veME").build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(handle_subscription, pattern="check_subscription"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_movie_code))
+
+    print("Bot ishga tushdi...")
+    app.run_polling()
